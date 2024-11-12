@@ -52,5 +52,5 @@ def change_page(data):
         current_page = page
         emit('update_page', {'page': current_page}, room='viewers')
 
-if __name__ == '_main_':
+if __name__ == '__main__':
     socketio.run(app, debug=True)
