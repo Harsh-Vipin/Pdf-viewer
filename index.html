@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>PDF Co-Viewer</title>
+    <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@2.9.359/build/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.min.js"></script>
+    
+    <style>
+        /* General Reset */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f9;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+        }
+
+        h2 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        #pdf-container {
+            width: 80%;
+            max-width: 800px;
+            background: #fff;
+            box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 20px 0;
+        }
+
+        #pdf-render {
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            padding: 10px;
+            background-color: #fafafa;
+        }
+
+        canvas {
+            max-width: 100%;
+            height: auto;
+            border-radius: 8px;
+        }
+
+        #controls {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+            padding: 10px;
+            background: #333;
+            color: #fff;
+        }
+
+        .btn {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            margin: 5px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s ease;
+        }
+
+        .btn:hover {
+            background-color: #45a049;
+        }
+
+        .btn:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+
+        .btn:focus {
+            outline: none;
+        }
+
+        #status {
+            font-size: 0.9em;
+            color: #999;
+            text-align: center;
+            padding: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h2>PDF Co-Viewer</h2>
+    
+    <div id="pdf-container">
+        <!-- Container for the PDF content -->
+        <div id="pdf-render"></div>
+
+        <!-- Navigation and Controls -->
+        <div id="controls">
+            <button onclick="previousPage()" class="btn" id="prev-btn">Previous</button>
+            <div id="status">Page <span id="page-num">1</span> of <span id="page-count">1</span></div>
+            <button onclick="nextPage()" class="btn" id="next-btn">Next</button>
+        </div>
+    </div>
+
+    <script>
+        const socket = io.connect(location.protocol + '//' + document.domain + ':' + location.port);
+        let pdfDoc = null;
+        let pageNum = 1;
+        let pageCount = 1;
+        let isAdmin = false;
+
+        socket.on('connect', () => {
+            const role = prompt("Enter 'admin' to be presenter or 'viewer' to follow along");
+            socket.emit('join', role);
+        });
+
+        socket.on('set_role', (data) => {
+            isAdmin = data.role === 'admin';
+            document.getElementById("prev-btn").style.display = isAdmin ? "inline-block" : "none";
+            document.getElementById("next-btn").style.display = isAdmin ? "inline-block" : "none";
+        });
+
+        socket.on('update_page', (data) => {
+            pageNum = data.page;
+            renderPage(pageNum);
+        });
+
+        async function loadPdf() {
+            pdfDoc = await pdfjsLib.getDocument('/pdf').promise;
+            pageCount = pdfDoc.numPages;
+            document.getElementById("page-count").textContent = pageCount;
+            renderPage(pageNum);
+        }
+
+        function renderPage(num) {
+            pdfDoc.getPage(num).then(page => {
+                const viewport = page.getViewport({ scale: 1.5 });
+                const canvas = document.createElement('canvas');
+                const context = canvas.getContext('2d');
+                canvas.width = viewport.width;
+                canvas.height = viewport.height;
+                document.getElementById('pdf-render').innerHTML = '';
+                document.getElementById('pdf-render').appendChild(canvas);
+
+                page.render({ canvasContext: context, viewport: viewport });
+                document.getElementById("page-num").textContent = num;
+            });
+        }
+
+        function previousPage() {
+            if (isAdmin && pageNum > 1) {
+                pageNum--;
+                socket.emit('change_page', { page: pageNum });
+                renderPage(pageNum);
+            }
+        }
+
+        function nextPage() {
+            if (isAdmin && pageNum < pdfDoc.numPages) {
+                pageNum++;
+                socket.emit('change_page', { page: pageNum });
+                renderPage(pageNum);
+            }
+        }
+
+        loadPdf();
+    </script>
+</body>
+</html>
